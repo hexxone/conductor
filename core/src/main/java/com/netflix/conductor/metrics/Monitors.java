@@ -50,7 +50,6 @@ public class Monitors {
 
     private Monitors() {}
 
-
     public static Counter getCounter(String name, String... tags) {
         String key = name + Arrays.toString(tags);
         return counters.computeIfAbsent(
@@ -106,12 +105,13 @@ public class Monitors {
     }
 
     /**
-     * Increment a counter that is used to measure the rate at which some event is occurring.
+     * Increment a counter that can be used to calculate the rate at which some event is occurring.
      * Consider a simple queue, counters would be used to measure things like the rate at which
      * items are being inserted and removed.
      *
-     * @param name
-     * @param additionalTags
+     * @param name Name of the class
+     * @param additionalTags additional Tags, always in pairs ("key1", "value1", "key2", "value2",
+     *     ...)
      */
     public static void increment(String name, String... additionalTags) {
         getCounter(name, additionalTags).increment();
@@ -122,9 +122,10 @@ public class Monitors {
      * size of a queue or number of threads in the running state. Since gauges are sampled, there is
      * no information about what might have occurred between samples.
      *
-     * @param name
-     * @param measurement
-     * @param additionalTags
+     * @param name Name of the class
+     * @param measurement current count or value
+     * @param additionalTags additional Tags, always in pairs ("key1", "value1", "key2", "value2",
+     *     ...)
      */
     private static void gauge(String name, long measurement, String... additionalTags) {
         gauge(name, additionalTags).set(measurement);
@@ -152,13 +153,13 @@ public class Monitors {
     public static void recordTaskExecutionTime(
             String taskType, long duration, boolean includesRetries, TaskModel.Status status) {
         increment(
-                        "task_execution_total",
-                        "taskType",
-                        taskType,
-                        "includeRetries",
-                        "" + includesRetries,
-                        "status",
-                        status.name());
+                "task_execution_total",
+                "taskType",
+                taskType,
+                "includeRetries",
+                "" + includesRetries,
+                "status",
+                status.name());
         getTimer(
                         "task_execution",
                         "taskType",
@@ -180,7 +181,8 @@ public class Monitors {
     }
 
     public static void recordTaskPollError(String taskType, String domain, String exception) {
-        increment("task_poll_error", "taskType", taskType, "domain", domain, "exception", exception);
+        increment(
+                "task_poll_error", "taskType", taskType, "domain", domain, "exception", exception);
     }
 
     public static void recordTaskPoll(String taskType) {
@@ -192,7 +194,7 @@ public class Monitors {
     }
 
     public static void recordTaskPollCount(String taskType, String domain, int count) {
-        getCounter("task_poll_count", "taskType", taskType, "domain", "" + domain).increment(count);
+        getCounter("task_poll_count", "taskType", taskType, "domain", domain).increment(count);
     }
 
     public static void recordQueueDepth(String taskType, long size, String ownerApp) {
@@ -230,8 +232,7 @@ public class Monitors {
     }
 
     public static void recordNumTasksInWorkflow(long count, String name, String version) {
-        distributionSummary("tasks_in_workflow", "workflowName", name, "version", version)
-                .record(count);
+        gauge("tasks_in_workflow", count, "workflowName", name, "version", version);
     }
 
     public static void recordTaskTimeout(String taskType) {
@@ -318,11 +319,11 @@ public class Monitors {
     public static void recordWorkflowCompletion(
             String workflowType, long duration, String ownerApp) {
         increment(
-                        "workflow_execution_total",
-                        "workflowName",
-                        workflowType,
-                        "ownerApp",
-                        StringUtils.defaultIfBlank(ownerApp, "unknown"));
+                "workflow_execution_total",
+                "workflowName",
+                workflowType,
+                "ownerApp",
+                StringUtils.defaultIfBlank(ownerApp, "unknown"));
         getTimer(
                         "workflow_execution",
                         "workflowName",
@@ -461,7 +462,8 @@ public class Monitors {
     }
 
     public static void recordWorkflowArchived(String workflowType, WorkflowModel.Status status) {
-        increment("workflow_archived", "workflowName", workflowType, "workflowStatus", status.name());
+        increment(
+                "workflow_archived", "workflowName", workflowType, "workflowStatus", status.name());
     }
 
     public static void recordArchivalDelayQueueSize(int val) {
