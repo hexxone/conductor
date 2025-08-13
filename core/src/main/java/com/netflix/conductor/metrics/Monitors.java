@@ -41,27 +41,42 @@ public class Monitors {
 
     private static final MeterRegistry registry = MetricsCollector.getMeterRegistry();
 
+    private static final double[] percentiles = new double[] {0.5, 0.75, 0.90, 0.95, 0.99};
     private static final Map<String, AtomicDouble> gauges = new ConcurrentHashMap<>();
+    private static final Map<String, Counter> counters = new ConcurrentHashMap<>();
+    private static final Map<String, Timer> timers = new ConcurrentHashMap<>();
+    private static final Map<String, DistributionSummary> distributionSummaries =
+            new ConcurrentHashMap<>();
 
     private Monitors() {}
 
 
     public static Counter getCounter(String name, String... tags) {
-        return registry.counter(name, toTags(tags));
+        String key = name + Arrays.toString(tags);
+        return counters.computeIfAbsent(
+                key, s -> Counter.builder(name).tags(toTags(tags)).register(registry));
     }
 
     public static Timer getTimer(String name, String... tags) {
-        return Timer.builder(name)
-                .tags(toTags(tags))
-                .publishPercentileHistogram()
-                .register(registry);
+        String key = name + Arrays.toString(tags);
+        return timers.computeIfAbsent(
+                key,
+                s ->
+                        Timer.builder(name)
+                                .tags(toTags(tags))
+                                .publishPercentiles(percentiles)
+                                .register(registry));
     }
 
     public static DistributionSummary distributionSummary(String name, String... tags) {
-        return DistributionSummary.builder(name)
-                .tags(toTags(tags))
-                .publishPercentileHistogram()
-                .register(registry);
+        String key = name + Arrays.toString(tags);
+        return distributionSummaries.computeIfAbsent(
+                key,
+                s ->
+                        DistributionSummary.builder(name)
+                                .tags(toTags(tags))
+                                .publishPercentileHistogram()
+                                .register(registry));
     }
 
     public static AtomicDouble gauge(String name, String... tags) {
@@ -425,7 +440,7 @@ public class Monitors {
     }
 
     public static void recordESIndexTime(String action, String docType, long val) {
-        increment(action + "_total", "docType", docType, "action", action);
+        increment(action + "_total", "docType", docType);
         getTimer(action, "docType", docType).record(val, TimeUnit.MILLISECONDS);
     }
 
