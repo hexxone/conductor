@@ -41,41 +41,27 @@ public class Monitors {
 
     private static final MeterRegistry registry = MetricsCollector.getMeterRegistry();
 
-    private static final double[] percentiles = new double[] {0.5, 0.75, 0.90, 0.95, 0.99};
     private static final Map<String, AtomicDouble> gauges = new ConcurrentHashMap<>();
-    private static final Map<String, Counter> counters = new ConcurrentHashMap<>();
-    private static final Map<String, Timer> timers = new ConcurrentHashMap<>();
-    private static final Map<String, DistributionSummary> distributionSummaries =
-            new ConcurrentHashMap<>();
 
     private Monitors() {}
 
+
     public static Counter getCounter(String name, String... tags) {
-        String key = name + Arrays.toString(tags);
-        return counters.computeIfAbsent(
-                key, s -> Counter.builder(name).tags(toTags(tags)).register(registry));
+        return registry.counter(name, toTags(tags));
     }
 
     public static Timer getTimer(String name, String... tags) {
-        String key = name + Arrays.toString(tags);
-        return timers.computeIfAbsent(
-                key,
-                s ->
-                        Timer.builder(name)
-                                .tags(toTags(tags))
-                                .publishPercentiles(percentiles)
-                                .register(registry));
+        return Timer.builder(name)
+                .tags(toTags(tags))
+                .publishPercentileHistogram()
+                .register(registry);
     }
 
     public static DistributionSummary distributionSummary(String name, String... tags) {
-        String key = name + Arrays.toString(tags);
-        return distributionSummaries.computeIfAbsent(
-                key,
-                s ->
-                        DistributionSummary.builder(name)
-                                .tags(toTags(tags))
-                                .publishPercentileHistogram()
-                                .register(registry));
+        return DistributionSummary.builder(name)
+                .tags(toTags(tags))
+                .publishPercentileHistogram()
+                .register(registry);
     }
 
     public static AtomicDouble gauge(String name, String... tags) {
@@ -112,7 +98,7 @@ public class Monitors {
      * @param name
      * @param additionalTags
      */
-    private static void counter(String name, String... additionalTags) {
+    public static void increment(String name, String... additionalTags) {
         getCounter(name, additionalTags).increment();
     }
 
@@ -143,12 +129,21 @@ public class Monitors {
     }
 
     public static void recordQueueWaitTime(String taskType, long queueWaitTime) {
+        increment("task_queue_wait_total", "taskType", taskType);
         getTimer("task_queue_wait", "taskType", taskType)
                 .record(queueWaitTime, TimeUnit.MILLISECONDS);
     }
 
     public static void recordTaskExecutionTime(
             String taskType, long duration, boolean includesRetries, TaskModel.Status status) {
+        increment(
+                        "task_execution_total",
+                        "taskType",
+                        taskType,
+                        "includeRetries",
+                        "" + includesRetries,
+                        "status",
+                        status.name());
         getTimer(
                         "task_execution",
                         "taskType",
@@ -161,6 +156,7 @@ public class Monitors {
     }
 
     public static void recordWorkflowDecisionTime(long duration) {
+        increment("workflow_decision_total");
         getTimer("workflow_decision").record(duration, TimeUnit.MILLISECONDS);
     }
 
@@ -169,11 +165,11 @@ public class Monitors {
     }
 
     public static void recordTaskPollError(String taskType, String domain, String exception) {
-        counter("task_poll_error", "taskType", taskType, "domain", domain, "exception", exception);
+        increment("task_poll_error", "taskType", taskType, "domain", domain, "exception", exception);
     }
 
     public static void recordTaskPoll(String taskType) {
-        counter("task_poll", "taskType", taskType);
+        increment("task_poll", "taskType", taskType);
     }
 
     public static void recordTaskPollCount(String taskType, int count) {
@@ -224,11 +220,11 @@ public class Monitors {
     }
 
     public static void recordTaskTimeout(String taskType) {
-        counter("task_timeout", "taskType", taskType);
+        increment("task_timeout", "taskType", taskType);
     }
 
     public static void recordTaskResponseTimeout(String taskType) {
-        counter("task_response_timeout", "taskType", taskType);
+        increment("task_response_timeout", "taskType", taskType);
     }
 
     public static void recordTaskPendingTime(String taskType, String workflowType, long duration) {
@@ -237,7 +233,7 @@ public class Monitors {
 
     public static void recordWorkflowTermination(
             String workflowType, WorkflowModel.Status status, String ownerApp) {
-        counter(
+        increment(
                 "workflow_failure",
                 "workflowName",
                 workflowType,
@@ -249,7 +245,7 @@ public class Monitors {
 
     public static void recordWorkflowStartSuccess(
             String workflowType, String version, String ownerApp) {
-        counter(
+        increment(
                 "workflow_start_success",
                 "workflowName",
                 workflowType,
@@ -260,7 +256,7 @@ public class Monitors {
     }
 
     public static void recordWorkflowStartError(String workflowType, String ownerApp) {
-        counter(
+        increment(
                 "workflow_start_error",
                 "workflowName",
                 workflowType,
@@ -270,7 +266,7 @@ public class Monitors {
 
     public static void recordUpdateConflict(
             String taskType, String workflowType, WorkflowModel.Status status) {
-        counter(
+        increment(
                 "task_update_conflict",
                 "workflowName",
                 workflowType,
@@ -282,7 +278,7 @@ public class Monitors {
 
     public static void recordUpdateConflict(
             String taskType, String workflowType, TaskModel.Status status) {
-        counter(
+        increment(
                 "task_update_conflict",
                 "workflowName",
                 workflowType,
@@ -293,19 +289,25 @@ public class Monitors {
     }
 
     public static void recordTaskUpdateError(String taskType, String workflowType) {
-        counter("task_update_error", "workflowName", workflowType, "taskType", taskType);
+        increment("task_update_error", "workflowName", workflowType, "taskType", taskType);
     }
 
     public static void recordTaskExtendLeaseError(String taskType, String workflowType) {
-        counter("task_extendLease_error", "workflowName", workflowType, "taskType", taskType);
+        increment("task_extendLease_error", "workflowName", workflowType, "taskType", taskType);
     }
 
     public static void recordTaskQueueOpError(String taskType, String workflowType) {
-        counter("task_queue_op_error", "workflowName", workflowType, "taskType", taskType);
+        increment("task_queue_op_error", "workflowName", workflowType, "taskType", taskType);
     }
 
     public static void recordWorkflowCompletion(
             String workflowType, long duration, String ownerApp) {
+        increment(
+                        "workflow_execution_total",
+                        "workflowName",
+                        workflowType,
+                        "ownerApp",
+                        StringUtils.defaultIfBlank(ownerApp, "unknown"));
         getTimer(
                         "workflow_execution",
                         "workflowName",
@@ -316,6 +318,7 @@ public class Monitors {
     }
 
     public static void recordUnackTime(String workflowType, long duration) {
+        increment("workflow_unack_total", "workflowName", workflowType);
         getTimer("workflow_unack", "workflowName", workflowType)
                 .record(duration, TimeUnit.MILLISECONDS);
     }
@@ -335,24 +338,24 @@ public class Monitors {
     }
 
     public static void recordObservableQMessageReceivedErrors(String queueType) {
-        counter("observable_queue_error", "queueType", queueType);
+        increment("observable_queue_error", "queueType", queueType);
     }
 
     public static void recordEventQueueMessagesHandled(String queueType, String queueName) {
-        counter("event_queue_messages_handled", "queueType", queueType, "queueName", queueName);
+        increment("event_queue_messages_handled", "queueType", queueType, "queueName", queueName);
     }
 
     public static void recordEventQueueMessagesError(String queueType, String queueName) {
-        counter("event_queue_messages_error", "queueType", queueType, "queueName", queueName);
+        increment("event_queue_messages_error", "queueType", queueType, "queueName", queueName);
     }
 
     public static void recordEventExecutionSuccess(String event, String handler, String action) {
-        counter("event_execution_success", "event", event, "handler", handler, "action", action);
+        increment("event_execution_success", "event", event, "handler", handler, "action", action);
     }
 
     public static void recordEventExecutionError(
             String event, String handler, String action, String exceptionClazz) {
-        counter(
+        increment(
                 "event_execution_error",
                 "event",
                 event,
@@ -365,12 +368,12 @@ public class Monitors {
     }
 
     public static void recordEventActionError(String action, String entityName, String event) {
-        counter("event_action_error", "action", action, "entityName", entityName, "event", event);
+        increment("event_action_error", "action", action, "entityName", entityName, "event", event);
     }
 
     public static void recordDaoRequests(
             String dao, String action, String taskType, String workflowType) {
-        counter(
+        increment(
                 "dao_requests",
                 "dao",
                 dao,
@@ -383,7 +386,7 @@ public class Monitors {
     }
 
     public static void recordDaoEventRequests(String dao, String action, String event) {
-        counter("dao_event_requests", "dao", dao, "action", action, "event", event);
+        increment("dao_event_requests", "dao", dao, "action", action, "event", event);
     }
 
     public static void recordDaoPayloadSize(
@@ -403,7 +406,7 @@ public class Monitors {
 
     public static void recordExternalPayloadStorageUsage(
             String name, String operation, String payloadType) {
-        counter(
+        increment(
                 "external_payload_storage_usage",
                 "name",
                 name,
@@ -414,14 +417,15 @@ public class Monitors {
     }
 
     public static void recordDaoError(String dao, String action) {
-        counter("dao_errors", "dao", dao, "action", action);
+        increment("dao_errors", "dao", dao, "action", action);
     }
 
     public static void recordAckTaskError(String taskType) {
-        counter("task_ack_error", "taskType", taskType);
+        increment("task_ack_error", "taskType", taskType);
     }
 
     public static void recordESIndexTime(String action, String docType, long val) {
+        increment(action + "_total", "docType", docType, "action", action);
         getTimer(action, "docType", docType).record(val, TimeUnit.MILLISECONDS);
     }
 
@@ -430,19 +434,19 @@ public class Monitors {
     }
 
     public static void recordDiscardedIndexingCount(String queueType) {
-        counter("discarded_index_count", "queueType", queueType);
+        increment("discarded_index_count", "queueType", queueType);
     }
 
     public static void recordAcquireLockUnsuccessful() {
-        counter("acquire_lock_unsuccessful");
+        increment("acquire_lock_unsuccessful");
     }
 
     public static void recordAcquireLockFailure(String exceptionClassName) {
-        counter("acquire_lock_failure", "exceptionType", exceptionClassName);
+        increment("acquire_lock_failure", "exceptionType", exceptionClassName);
     }
 
     public static void recordWorkflowArchived(String workflowType, WorkflowModel.Status status) {
-        counter("workflow_archived", "workflowName", workflowType, "workflowStatus", status.name());
+        increment("workflow_archived", "workflowName", workflowType, "workflowStatus", status.name());
     }
 
     public static void recordArchivalDelayQueueSize(int val) {
@@ -450,11 +454,11 @@ public class Monitors {
     }
 
     public static void recordDiscardedArchivalCount() {
-        counter("discarded_archival_count");
+        increment("discarded_archival_count");
     }
 
     public static void recordSystemTaskWorkerPollingLimited(String queueName) {
-        counter("system_task_worker_polling_limited", "queueName", queueName);
+        increment("system_task_worker_polling_limited", "queueName", queueName);
     }
 
     public static void recordEventQueuePollSize(String queueType, int val) {
@@ -462,7 +466,7 @@ public class Monitors {
     }
 
     public static void recordQueueMessageRepushFromRepairService(String queueName) {
-        counter("queue_message_repushed", "queueName", queueName);
+        increment("queue_message_repushed", "queueName", queueName);
     }
 
     public static void recordTaskExecLogSize(int val) {
